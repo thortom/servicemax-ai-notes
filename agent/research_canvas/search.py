@@ -1,100 +1,92 @@
 """
-The search node is responsible for searching the internet for information.
+The search node is responsible for searching the manual vectorstore for information.
 """
 
 import os
-from typing import cast, List
-from pydantic import BaseModel, Field
+from typing import cast, Optional
 from langchain_core.runnables import RunnableConfig
-from langchain_core.messages import AIMessage, ToolMessage, SystemMessage
-from langchain.tools import tool
-from tavily import TavilyClient
-from copilotkit.langgraph import copilotkit_emit_state, copilotkit_customize_config
+from langchain_core.messages import AIMessage, ToolMessage
+from langchain.vectorstores import Chroma
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.tools.retriever import create_retriever_tool
+from copilotkit.langgraph import copilotkit_emit_state
 from research_canvas.state import AgentState
 from research_canvas.model import get_model
 
-class ResourceInput(BaseModel):
-    """A resource with a short description"""
-    url: str = Field(description="The URL of the resource")
-    title: str = Field(description="The title of the resource")
-    description: str = Field(description="A short description of the resource")
+def create_tools(
+    vectorstore: Optional[Chroma] = None,
+    tool_name: str = "retrieve_manual_for_machine",
+    tool_description: str = "Search and return issue support information for the MS2750 filleting machine."
+) -> list:
+    """
+    Create and return the retriever tool from the vectorstore.
+    
+    Args:
+        vectorstore: Optional pre-existing Chroma vectorstore
+        tool_name: Name for the retriever tool
+        tool_description: Description of what the tool does
+        
+    Returns:
+        List containing the retriever tool
+    """
+        
+    if vectorstore is None:
+        raise Exception("No vectorstore provided")
+        
+    retriever = vectorstore.as_retriever()
+    retriever_tool = create_retriever_tool(
+        retriever,
+        tool_name,
+        tool_description,
+    )
+    return [retriever_tool]
 
-@tool
-def ExtractResources(resources: List[ResourceInput]): # pylint: disable=invalid-name,unused-argument
-    """Extract the 3-5 most relevant resources from a search result."""
+# Initialize the vectorstore
+vectorstore = Chroma(
+    persist_directory="hw_and_sw_manual_vectorstore_2024_11_25/my_vectorstore",
+    embedding_function=OpenAIEmbeddings(),
+    collection_name="manual-collection"
+)
 
-tavily_client = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+# Create tools from existing vectorstore
+tools = create_tools(vectorstore=vectorstore)
 
 async def search_node(state: AgentState, config: RunnableConfig):
     """
-    The search node is responsible for searching the internet for resources.
+    The search node is responsible for searching the manual vectorstore for relevant information.
     """
-
     ai_message = cast(AIMessage, state["messages"][-1])
-
+    
+    state["rag_results"] = state.get("rag_results", [])  # New key for RAG results
     state["resources"] = state.get("resources", [])
     state["logs"] = state.get("logs", [])
     queries = ai_message.tool_calls[0]["args"]["queries"]
 
     for query in queries:
         state["logs"].append({
-            "message": f"Search for {query}",
+            "message": f"Searching manual for: {query}",
             "done": False
         })
 
     await copilotkit_emit_state(config, state)
 
     search_results = []
-
     for i, query in enumerate(queries):
-        response = tavily_client.search(query)
+        # Use the retriever tool to get relevant documents
+        response = tools[0].invoke({"query": query})
         search_results.append(response)
         state["logs"][i]["done"] = True
         await copilotkit_emit_state(config, state)
 
-    config = copilotkit_customize_config(
-        config,
-        emit_intermediate_state=[{
-            "state_key": "resources",
-            "tool": "ExtractResources",
-            "tool_argument": "resources",
-        }],
-    )
-
-    model = get_model(state)
-    ainvoke_kwargs = {}
-    if model.__class__.__name__ in ["ChatOpenAI"]:
-        ainvoke_kwargs["parallel_tool_calls"] = False
-
-    # figure out which resources to use
-    response = await model.bind_tools(
-        [ExtractResources],
-        tool_choice="ExtractResources",
-        **ainvoke_kwargs
-    ).ainvoke([
-        SystemMessage(
-            content="""
-            You need to extract the 3-5 most relevant resources from the following search results.
-            """
-        ),
-        *state["messages"],
-        ToolMessage(
+    # Add the search results to the RAG results instead of resources
+    state["rag_results"].extend(search_results)
+    
+    state["messages"].append(ToolMessage(
         tool_call_id=ai_message.tool_calls[0]["id"],
-        content=f"Performed search: {search_results}"
-    )
-    ], config)
+        content=f"Found the following information in the manual: {search_results}"
+    ))
 
     state["logs"] = []
     await copilotkit_emit_state(config, state)
-
-    ai_message_response = cast(AIMessage, response)
-    resources = ai_message_response.tool_calls[0]["args"]["resources"]
-
-    state["resources"].extend(resources)
-
-    state["messages"].append(ToolMessage(
-        tool_call_id=ai_message.tool_calls[0]["id"],
-        content=f"Added the following resources: {resources}"
-    ))
 
     return state

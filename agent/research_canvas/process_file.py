@@ -34,17 +34,12 @@ async def _process_resource(url: str):
         if url.lower().endswith(".msg"):    # TODO: Do this asynchronously
             msg = extract_msg.openMsg(url)
             # Process MSG file content
-            content = f"Subject: {msg.subject}\nBody: {msg.body}"
-            summary = md.getJson(content)
-            print(f"url msg: {url}")
-            print(summary)
+            summary = msg.getJson()
             return summary
 
         else:
             content = md.convert(url)
             summary = content.text_content
-            print(f"url other: {url}")
-            print(summary)
             return summary
     except Exception as e: # pylint: disable=broad-except
         _RESOURCE_CACHE[url] = "ERROR"
@@ -52,7 +47,8 @@ async def _process_resource(url: str):
 
 async def process_file_node(state: AgentState, config: RunnableConfig):
     """
-    Download resources from the internet.
+    Process resources that require downloading or special handling.
+    Skips RAG results which are stored separately in state["rag_results"].
     """
     state["resources"] = state.get("resources", [])
     state["logs"] = state.get("logs", [])
@@ -62,6 +58,10 @@ async def process_file_node(state: AgentState, config: RunnableConfig):
 
     # Find resources that are not downloaded
     for resource in state["resources"]:
+        # Skip resources that don't have a URL (like RAG results)
+        if not isinstance(resource, dict) or "url" not in resource:
+            continue
+            
         if not get_resource(resource["url"]):
             resources_to_download.append(resource)
             state["logs"].append({
@@ -77,7 +77,10 @@ async def process_file_node(state: AgentState, config: RunnableConfig):
         # Update the resource description and ensure state is properly updated
         description = await _process_resource(resource["url"])
         resource["description"] = description
-        state["resources"][i]["description"] = description  # Update the state's resources directly
+        
+        # Find the index of this resource in the original resources list
+        resource_index = state["resources"].index(resource)
+        state["resources"][resource_index]["description"] = description
         state["logs"][logs_offset + i]["done"] = True
 
         # update UI

@@ -48,19 +48,21 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> \
     )
 
     state["resources"] = state.get("resources", [])
+    state["rag_results"] = state.get("rag_results", [])  # Add rag_results
     research_question = state.get("research_question", "")
     report = state.get("report", "")
 
     resources = []
 
     for resource in state["resources"]:
-        content = _process_resource(resource["url"])
-        if content == "ERROR":
-            continue
-        resources.append({
-            **resource,
-            "content": content
-        })
+        if isinstance(resource, dict) and "url" in resource:
+            content = _process_resource(resource["url"])
+            if content == "ERROR":
+                continue
+            resources.append({
+                **resource,
+                "content": content
+            })
 
     model = get_model(state)
     # Prepare the kwargs for the ainvoke method
@@ -92,7 +94,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> \
             This is the research report:
             {report}
 
-            Here are the resources that you have available:
+            Here are the relevant sections from the manual:
+            {state["rag_results"]}
+
+            Here are additional resources that you have available:
             {resources}
             """
         ),

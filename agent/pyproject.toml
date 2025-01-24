@@ -33,6 +33,7 @@ langgraph-checkpoint-sqlite = "^2.0.1"
 aiosqlite = "^0.20.0"
 markitdown = "^0.0.1a3"
 extract-msg = "^0.52.0"
+chromadb = "^0.6.3"
 
 [tool.poetry.scripts]
 demo = "research_canvas.demo:main"
