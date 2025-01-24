@@ -138,15 +138,15 @@ export function ResearchCanvas() {
       <div className="space-y-8">
         <div>
           <h2 className="text-lg font-medium mb-3 text-primary">
-            Research Question
+            Issue Description
           </h2>
           <Input
-            placeholder="Enter your research question"
+            placeholder="Enter the issue description here"
             value={state.research_question || ""}
             onChange={(e) =>
               setState({ ...state, research_question: e.target.value })
             }
-            aria-label="Research question"
+            aria-label="Issue description"
             className="bg-background px-6 py-8 border-0 shadow-none rounded-xl text-md font-extralight focus-visible:ring-0 placeholder:text-slate-400"
           />
         </div>
@@ -185,12 +185,10 @@ export function ResearchCanvas() {
         </div>
 
         <div className="flex flex-col h-full">
-          <h2 className="text-lg font-medium mb-3 text-primary">
-            Research Draft
-          </h2>
+          <h2 className="text-lg font-medium mb-3 text-primary">AI Notes</h2>
           <Textarea
             data-test-id="research-draft"
-            placeholder="Write your research draft here"
+            placeholder="AI Notes goes here"
             value={state.report || ""}
             onChange={(e) => setState({ ...state, report: e.target.value })}
             rows={10}

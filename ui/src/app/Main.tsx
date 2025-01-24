@@ -4,6 +4,7 @@ import { AgentState } from "@/lib/types";
 import { useCoAgent } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { useCopilotChatSuggestions } from "@copilotkit/react-ui";
+import Feedback from "@/components/Feedback";
 
 export default function Main() {
   const { model, agent } = useModelSelectorContext();
@@ -11,7 +12,7 @@ export default function Main() {
     name: agent,
     initialState: {
       model,
-      research_question: "",
+      technical_issue: "",
       resources: [],
       report: "",
       logs: [],
@@ -19,13 +20,19 @@ export default function Main() {
   });
 
   useCopilotChatSuggestions({
-    instructions: "Lifespan of penguins",
+    instructions: "Please assist me with this issue.",
   });
+
+  const handleMessage = async (message: string) => {
+    // Clear the logs before starting the new action
+    setState({ ...state, logs: [] });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  };
 
   return (
     <>
       <h1 className="flex h-[60px] bg-[#0E103D] text-white items-center px-10 text-2xl font-medium">
-        Research Helper
+        MS2750 Service Support
       </h1>
 
       <div
@@ -36,7 +43,7 @@ export default function Main() {
           <ResearchCanvas />
         </div>
         <div
-          className="w-[500px] h-full flex-shrink-0"
+          className="w-[500px] h-full flex-shrink-0 relative"
           style={
             {
               "--copilot-kit-background-color": "#E0E9FD",
@@ -47,15 +54,14 @@ export default function Main() {
             } as any
           }
         >
+          <div className="absolute top-2 right-2 z-10">
+            <Feedback onSubmitFeedback={handleMessage} />
+          </div>
           <CopilotChat
             className="h-full"
-            onSubmitMessage={async (message) => {
-              // clear the logs before starting the new research
-              setState({ ...state, logs: [] });
-              await new Promise((resolve) => setTimeout(resolve, 30));
-            }}
+            onSubmitMessage={handleMessage}
             labels={{
-              initial: "Hi! How can I assist you with your research today?",
+              initial: "Hi! How can I assist you today?",
             }}
           />
         </div>
