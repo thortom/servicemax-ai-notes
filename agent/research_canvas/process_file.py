@@ -5,6 +5,7 @@ This module contains the implementation of the download_node function.
 from markitdown import MarkItDown
 from openai import OpenAI
 import extract_msg
+import os
 from copilotkit.langgraph import copilotkit_emit_state
 from langchain_core.runnables import RunnableConfig
 from research_canvas.state import AgentState
@@ -25,22 +26,33 @@ _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHT
 
 async def _process_resource(url: str):
     """
-    Download a resource from the internet asynchronously.
+    Download a resource from the internet or process a local file asynchronously.
     """
     try:
         # Clean up the URL/path by removing extra quotes and normalizing path
-        url = url.strip("'\"").replace("\\", "")
+        url = url.strip("'\"").replace("\\", "/")
         
-        if url.lower().endswith(".msg"):    # TODO: Do this asynchronously
-            msg = extract_msg.openMsg(url)
-            # Process MSG file content
-            summary = msg.getJson()
-            return summary
-
-        else:
-            content = md.convert(url)
-            summary = content.text_content
-            return summary
+        # Check if this is a local file path
+        if os.path.isfile(url):
+            # Handle local files based on their extension
+            _, ext = os.path.splitext(url.lower())
+            
+            if ext == '.msg':
+                msg = extract_msg.openMsg(url)
+                summary = msg.getJson()
+                return summary
+            
+            # For text-based files, read their content directly
+            elif ext in ['.txt', '.md', '.py', '.js', '.ts', '.html', '.css', '.json']:
+                with open(url, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                return content
+                
+            else:
+                content = md.convert(url)
+                summary = content.text_content
+                return summary
+            
     except Exception as e: # pylint: disable=broad-except
         _RESOURCE_CACHE[url] = "ERROR"
         return f"Error processing resource: {e}"
@@ -65,25 +77,23 @@ async def process_file_node(state: AgentState, config: RunnableConfig):
         if not get_resource(resource["url"]):
             resources_to_download.append(resource)
             state["logs"].append({
-                "message": f"Downloading {resource['url']}",
+                "message": f"Processing {resource['url']}",
                 "done": False
             })
 
     # Emit the state to let the UI update
     await copilotkit_emit_state(config, state)
 
-    # Download the resources
+    # Download resources
     for i, resource in enumerate(resources_to_download):
-        # Update the resource description and ensure state is properly updated
-        description = await _process_resource(resource["url"])
-        resource["description"] = description
+        content = await _process_resource(resource["url"])
+        _RESOURCE_CACHE[resource["url"]] = content
+        resource["description"] = content
         
         # Find the index of this resource in the original resources list
         resource_index = state["resources"].index(resource)
-        state["resources"][resource_index]["description"] = description
+        state["resources"][resource_index]["description"] = content
         state["logs"][logs_offset + i]["done"] = True
 
-        # update UI
         await copilotkit_emit_state(config, state)
-
     return state

@@ -1,7 +1,8 @@
 export type Resource = {
-  url: string;
+  url?: string;
   title: string;
   description: string;
+  file?: File;
 };
 
 export type AgentState = {

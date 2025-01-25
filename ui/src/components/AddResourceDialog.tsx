@@ -8,8 +8,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Plus } from "lucide-react";
+import { PlusCircle, Plus, Upload } from "lucide-react";
 import { Resource } from "@/lib/types";
+import { useState } from "react";
 
 type AddResourceDialogProps = {
   isOpen: boolean;
@@ -26,6 +27,20 @@ export function AddResourceDialog({
   setNewResource,
   addResource,
 }: AddResourceDialogProps) {
+  const [resourceType, setResourceType] = useState<'url' | 'file'>('url');
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setNewResource({
+        ...newResource,
+        file,
+        url: undefined,
+        title: file.name,
+      });
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
@@ -42,19 +57,56 @@ export function AddResourceDialog({
           <DialogTitle>Add New Resource</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <label htmlFor="new-url" className="text-sm font-bold">
-            Resource URL
-          </label>
-          <Input
-            id="new-url"
-            placeholder="Resource URL"
-            value={newResource.url || ""}
-            onChange={(e) =>
-              setNewResource({ ...newResource, url: e.target.value })
-            }
-            aria-label="New resource URL"
-            className="bg-background"
-          />
+          <div className="flex gap-4">
+            <Button
+              variant={resourceType === 'url' ? "default" : "outline"}
+              onClick={() => setResourceType('url')}
+              className="flex-1"
+            >
+              URL
+            </Button>
+            <Button
+              variant={resourceType === 'file' ? "default" : "outline"}
+              onClick={() => setResourceType('file')}
+              className="flex-1"
+            >
+              File Upload
+            </Button>
+          </div>
+
+          {resourceType === 'url' ? (
+            <>
+              <label htmlFor="new-url" className="text-sm font-bold">
+                Resource URL
+              </label>
+              <Input
+                id="new-url"
+                placeholder="Resource URL"
+                value={newResource.url || ""}
+                onChange={(e) =>
+                  setNewResource({ ...newResource, url: e.target.value, file: undefined })
+                }
+                aria-label="New resource URL"
+                className="bg-background"
+              />
+            </>
+          ) : (
+            <>
+              <label htmlFor="new-file" className="text-sm font-bold">
+                Upload File
+              </label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="new-file"
+                  type="file"
+                  onChange={handleFileChange}
+                  aria-label="Upload file"
+                  className="bg-background"
+                />
+              </div>
+            </>
+          )}
+
           <label htmlFor="new-title" className="text-sm font-bold">
             Resource Title
           </label>
@@ -89,7 +141,7 @@ export function AddResourceDialog({
           onClick={addResource}
           className="w-full bg-[#6766FC] text-white"
           disabled={
-            !newResource.url || !newResource.title || !newResource.description
+            (!newResource.url && !newResource.file) || !newResource.title || !newResource.description
           }
         >
           <Plus className="w-4 h-4 mr-2" /> Add Resource

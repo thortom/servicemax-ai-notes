@@ -93,13 +93,47 @@ export function ResearchCanvas() {
     url: "",
     title: "",
     description: "",
+    file: undefined,
   });
   const [isAddResourceOpen, setIsAddResourceOpen] = useState(false);
 
-  const addResource = () => {
-    if (newResource.url) {
-      setResources([...resources, { ...newResource }]);
-      setNewResource({ url: "", title: "", description: "" });
+  const addResource = async () => {
+    if (newResource.url || newResource.file) {
+      if (newResource.file) {
+        // Create FormData and append the file
+        const formData = new FormData();
+        formData.append('file', newResource.file);
+        
+        try {
+          // Upload the file to the server
+          const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+          });
+          
+          if (!response.ok) {
+            throw new Error('File upload failed');
+          }
+          
+          const { url } = await response.json();
+          
+          // Add the resource with the file URL
+          setResources([...resources, { 
+            ...newResource,
+            url,
+            file: undefined // Clear the file after upload
+          }]);
+        } catch (error) {
+          console.error('Error uploading file:', error);
+          // Handle error (you might want to show an error message to the user)
+          return;
+        }
+      } else {
+        // Handle URL-based resources as before
+        setResources([...resources, { ...newResource }]);
+      }
+      
+      setNewResource({ url: "", title: "", description: "", file: undefined });
       setIsAddResourceOpen(false);
     }
   };
@@ -116,7 +150,7 @@ export function ResearchCanvas() {
 
   const handleCardClick = (resource: Resource) => {
     setEditResource({ ...resource }); // Ensure a new object is created
-    setOriginalUrl(resource.url); // Store the original URL
+    setOriginalUrl(resource.url ?? null); // Handle undefined url by converting it to null
     setIsEditResourceOpen(true);
   };
 
