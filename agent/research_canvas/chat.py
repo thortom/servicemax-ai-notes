@@ -56,7 +56,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> \
 
     for resource in state["resources"]:
         if isinstance(resource, dict) and "url" in resource:
-            content = _process_resource(resource["url"])
+            content = await _process_resource(resource["url"])
             if content == "ERROR":
                 continue
             resources.append({

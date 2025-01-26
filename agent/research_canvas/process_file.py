@@ -8,6 +8,7 @@ import extract_msg
 import os
 import aiohttp
 import html2text
+import atexit
 from urllib.parse import urlparse
 from copilotkit.langgraph import copilotkit_emit_state
 from langchain_core.runnables import RunnableConfig
@@ -18,13 +19,27 @@ md = MarkItDown(llm_client=client, llm_model="gpt-4o")
 
 _RESOURCE_CACHE = {}
 
+def cleanup():
+    """
+    Cleanup function to be called on exit.
+    Ensures all resources are properly released.
+    """
+    global client, md
+    if client:
+        client.close()
+    if md:
+        md.close()
+    _RESOURCE_CACHE.clear()
+
+atexit.register(cleanup)
+
+_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3" # pylint: disable=line-too-long
+
 def get_resource(url: str):
     """
     Get a resource from the cache.
     """
     return _RESOURCE_CACHE.get(url, "")
-
-_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3" # pylint: disable=line-too-long
 
 def is_local_path(url: str) -> bool:
     """
