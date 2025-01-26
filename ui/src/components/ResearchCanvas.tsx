@@ -57,7 +57,7 @@ export function ResearchCanvas() {
           </div>
           <Resources
             resources={resources.filter((resource) =>
-              (args.urls || []).includes(resource.url)
+              (args.urls || []).includes(resource.url ?? '')
             )}
             customWidth={200}
           />

@@ -76,7 +76,7 @@ export function Resources({
                         className="inline-block mr-2"
                         style={{ width: "16px", height: "16px" }}
                       />
-                      {truncateUrl(resource.url)}
+                      {truncateUrl(resource.url ?? "")}
                     </>
                   )}
                 </a>
@@ -89,7 +89,7 @@ export function Resources({
                     size="icon"
                     onClick={(e) => {
                       e.stopPropagation();
-                      removeResource?.(resource.url);
+                      removeResource?.(resource.url ?? "");
                     }}
                     aria-label={`Remove ${resource.url}`}
                   >
