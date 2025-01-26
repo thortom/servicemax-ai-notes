@@ -5,9 +5,16 @@ import { useCoAgent } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import { useCopilotChatSuggestions } from "@copilotkit/react-ui";
 import Feedback from "@/components/Feedback";
+import React from "react";
 
 export default function Main() {
-  const { model, agent } = useModelSelectorContext();
+  const { model, agent, setHidden } = useModelSelectorContext();
+
+  // Set the model selector to hidden
+  React.useEffect(() => {
+    setHidden(true);
+  }, [setHidden]);
+
   const { state, setState } = useCoAgent<AgentState>({
     name: agent,
     initialState: {

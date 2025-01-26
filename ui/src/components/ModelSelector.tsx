@@ -11,7 +11,11 @@ import {
 import { useModelSelectorContext } from "@/lib/model-selector-provider";
 
 export function ModelSelector() {
-  const { model, setModel } = useModelSelectorContext();
+  const { model, setModel, hidden } = useModelSelectorContext();
+
+  if (hidden) {
+    return null;
+  }
 
   return (
     <div className="fixed bottom-0 left-0 p-4 z-50">
