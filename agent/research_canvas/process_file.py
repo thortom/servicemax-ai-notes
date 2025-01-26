@@ -6,6 +6,9 @@ from markitdown import MarkItDown
 from openai import OpenAI
 import extract_msg
 import os
+import aiohttp
+import html2text
+from urllib.parse import urlparse
 from copilotkit.langgraph import copilotkit_emit_state
 from langchain_core.runnables import RunnableConfig
 from research_canvas.state import AgentState
@@ -21,41 +24,80 @@ def get_resource(url: str):
     """
     return _RESOURCE_CACHE.get(url, "")
 
-
 _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3" # pylint: disable=line-too-long
+
+def is_local_path(url: str) -> bool:
+    """
+    Check if the given URL is a local file path.
+    """
+    parsed = urlparse(url)
+    return not parsed.scheme or parsed.scheme == 'file'
+
+async def _read_local_file(path: str) -> str:
+    """
+    Read a local file and return its content.
+    """
+    try:
+        _, ext = os.path.splitext(path.lower())
+        
+        if ext == '.msg':
+            msg = extract_msg.openMsg(path)
+            return msg.getJson()
+        
+        # For text-based files, read their content directly
+        elif ext in ['.txt', '.md', '.py', '.js', '.ts', '.html', '.css', '.json']:
+            with open(path, 'r', encoding='utf-8') as f:
+                return f.read()
+                
+        else:
+            content = md.convert(path)
+            return content.text_content
+            
+    except Exception as e:
+        return f"Error reading local file: {e}"
 
 async def _process_resource(url: str):
     """
-    Download a resource from the internet or process a local file asynchronously.
+    Download a resource from the internet or local file system asynchronously.
     """
     try:
         # Clean up the URL/path by removing extra quotes and normalizing path
         url = url.strip("'\"").replace("\\", "/")
-        
-        # Check if this is a local file path
-        if os.path.isfile(url):
-            # Handle local files based on their extension
-            _, ext = os.path.splitext(url.lower())
-            
-            if ext == '.msg':
-                msg = extract_msg.openMsg(url)
-                summary = msg.getJson()
-                return summary
-            
-            # For text-based files, read their content directly
-            elif ext in ['.txt', '.md', '.py', '.js', '.ts', '.html', '.css', '.json']:
-                with open(url, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                return content
+
+        # Handle local files
+        if is_local_path(url):
+            return await _read_local_file(url)
+
+        # Handle web URLs
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                url,
+                headers={"User-Agent": _USER_AGENT},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as response:
+                response.raise_for_status()
+                content_type = response.headers.get('Content-Type', '').lower()
                 
-            else:
+                # Handle PDFs and other binary content
+                if 'application/pdf' in content_type or url.lower().endswith('.pdf'):
+                    content = md.convert(url)
+                    return content.text_content
+                
+                # Handle HTML content
+                if 'text/html' in content_type:
+                    html_content = await response.text()
+                    return html2text.html2text(html_content)
+                    
+                # Handle plain text content
+                if 'text/plain' in content_type:
+                    return await response.text()
+                    
+                # For unknown content types, try md.convert
                 content = md.convert(url)
-                summary = content.text_content
-                return summary
-            
-    except Exception as e: # pylint: disable=broad-except
-        _RESOURCE_CACHE[url] = "ERROR"
-        return f"Error processing resource: {e}"
+                return content.text_content
+
+    except Exception as e:  # pylint: disable=broad-except
+        return f"Error accessing resource: {e}"
 
 async def process_file_node(state: AgentState, config: RunnableConfig):
     """
