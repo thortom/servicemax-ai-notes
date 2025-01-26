@@ -4,6 +4,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,7 +28,7 @@ export function AddResourceDialog({
   setNewResource,
   addResource,
 }: AddResourceDialogProps) {
-  const [resourceType, setResourceType] = useState<'url' | 'file'>('url');
+  const [resourceType, setResourceType] = useState<'url' | 'file'>('file');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -120,32 +121,18 @@ export function AddResourceDialog({
             aria-label="New resource title"
             className="bg-background"
           />
-          <label htmlFor="new-description" className="text-sm font-bold">
-            Resource Description
-          </label>
-          <Textarea
-            id="new-description"
-            placeholder="Resource Description"
-            value={newResource.description || ""}
-            onChange={(e) =>
-              setNewResource({
-                ...newResource,
-                description: e.target.value,
-              })
-            }
-            aria-label="New resource description"
-            className="bg-background"
-          />
         </div>
-        <Button
-          onClick={addResource}
-          className="w-full bg-[#6766FC] text-white"
-          disabled={
-            (!newResource.url && !newResource.file) || !newResource.title || !newResource.description
-          }
-        >
-          <Plus className="w-4 h-4 mr-2" /> Add Resource
-        </Button>
+        <DialogFooter>
+          <Button
+            onClick={addResource}
+            className="w-full bg-[#6766FC] text-white"
+            disabled={
+              (!newResource.url && !newResource.file) || !newResource.title
+            }
+          >
+            <Plus className="w-4 h-4 mr-2" /> Add Resource
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
