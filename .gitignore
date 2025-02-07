@@ -2,7 +2,7 @@ agent/.gitignore
 agent/.vscode/
 agent/agent/
 agent/copilot_ui/
-agent/hw_and_sw_manual_vectorstore_2024_11_25/
+agent/hw_and_sw_manual_vectorstore_202*
 agent/install.log
 agent/poetry.lock
 ui/.eslintrc.json
