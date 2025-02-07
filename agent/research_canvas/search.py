@@ -53,10 +53,26 @@ vectorstore = Chroma(
 tools = create_tools(vectorstore=vectorstore)
 
 def extract_error_code(query: str) -> Optional[str]:
-    """Extract error code from query if present."""
-    error_code_pattern = r'[A-Z]\d{4}'
-    match = re.search(error_code_pattern, query)
-    return match.group(0) if match else None
+    """
+    Extract error code from query if present.
+    Handles both standard error codes (e.g., F6003) and hexadecimal codes (e.g., 0x01010006).
+    """
+    # Pattern for standard error codes like F6003
+    standard_pattern = r'[A-Z]\d{4}'
+    # Pattern for hexadecimal error codes like 0x01010006
+    hex_pattern = r'0x[0-9A-Fa-f]{8}'
+    
+    # Try standard pattern first
+    match = re.search(standard_pattern, query)
+    if match:
+        return match.group(0)
+    
+    # Try hex pattern if standard pattern didn't match
+    match = re.search(hex_pattern, query)
+    if match:
+        return match.group(0)
+    
+    return None
 
 async def search_node(state: AgentState, config: RunnableConfig):
     """
@@ -79,6 +95,8 @@ async def search_node(state: AgentState, config: RunnableConfig):
     await copilotkit_emit_state(config, state)
 
     search_results = []
+    seen_contents = set()  # Track unique content
+    
     for i, query in enumerate(queries):
         combined_results = []
         error_code = extract_error_code(query)
@@ -92,13 +110,17 @@ async def search_node(state: AgentState, config: RunnableConfig):
                     k=2,
                     filter={
                         "$and": [
-                            {"error_code": {"$eq": error_code}},
-                            {"source": {"$eq": "motor_error_codes"}}
+                                {"error_code": {"$eq": error_code}},
+                                {"source": {"$eq": "motor_error_codes"}}
                         ]
                     }
                 )
                 if error_results:
-                    combined_results.extend([doc.page_content for doc in error_results])
+                    # Only add unique content
+                    for doc in error_results:
+                        if doc.page_content not in seen_contents:
+                            combined_results.append(doc.page_content)
+                            seen_contents.add(doc.page_content)
                     state["logs"].append({
                         "message": f"Found specific error code match for {error_code}",
                         "done": True
@@ -118,23 +140,24 @@ async def search_node(state: AgentState, config: RunnableConfig):
                 k=3,
                 filter=general_filter
             )
-            general_content = [doc.page_content for doc in general_results]
             
-            # If we have error code results, append unique general results
-            if combined_results:
-                for content in general_content:
-                    if content not in combined_results:
-                        combined_results.append(content)
-            else:
-                combined_results = general_content
+            # Only add unique content
+            for doc in general_results:
+                if doc.page_content not in seen_contents:
+                    combined_results.append(doc.page_content)
+                    seen_contents.add(doc.page_content)
                 
         except Exception as e:
             # Fallback to using the retriever tool if metadata filtering fails
             general_results = tools[0].invoke({"query": query})
             if not combined_results:  # Only use if we don't have error results
-                combined_results = general_results
+                for content in general_results:
+                    if content not in seen_contents:
+                        combined_results.append(content)
+                        seen_contents.add(content)
         
-        search_results.append(combined_results)
+        if combined_results:  # Only append if we have results
+            search_results.append(combined_results)
         state["logs"][i]["done"] = True
         await copilotkit_emit_state(config, state)
 
