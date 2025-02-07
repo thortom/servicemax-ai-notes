@@ -12,6 +12,7 @@ from langchain.tools.retriever import create_retriever_tool
 from copilotkit.langgraph import copilotkit_emit_state
 from research_canvas.state import AgentState
 from research_canvas.model import get_model
+import re
 
 def create_tools(
     vectorstore: Optional[Chroma] = None,
@@ -43,7 +44,7 @@ def create_tools(
 
 # Initialize the vectorstore
 vectorstore = Chroma(
-    persist_directory="hw_and_sw_manual_vectorstore_2024_11_25/my_vectorstore",
+    persist_directory="hw_and_sw_manual_vectorstore_2025_02_07/my_vectorstore",
     embedding_function=OpenAIEmbeddings(),
     collection_name="manual-collection"
 )
@@ -51,13 +52,20 @@ vectorstore = Chroma(
 # Create tools from existing vectorstore
 tools = create_tools(vectorstore=vectorstore)
 
+def extract_error_code(query: str) -> Optional[str]:
+    """Extract error code from query if present."""
+    error_code_pattern = r'[A-Z]\d{4}'
+    match = re.search(error_code_pattern, query)
+    return match.group(0) if match else None
+
 async def search_node(state: AgentState, config: RunnableConfig):
     """
-    The search node is responsible for searching the manual vectorstore for relevant information.
+    The search node performs both error code specific search and general semantic search,
+    combining results from both approaches when an error code is present.
     """
     ai_message = cast(AIMessage, state["messages"][-1])
     
-    state["rag_results"] = state.get("rag_results", [])  # New key for RAG results
+    state["rag_results"] = state.get("rag_results", [])
     state["resources"] = state.get("resources", [])
     state["logs"] = state.get("logs", [])
     queries = ai_message.tool_calls[0]["args"]["queries"]
@@ -72,13 +80,64 @@ async def search_node(state: AgentState, config: RunnableConfig):
 
     search_results = []
     for i, query in enumerate(queries):
-        # Use the retriever tool to get relevant documents
-        response = tools[0].invoke({"query": query})
-        search_results.append(response)
+        combined_results = []
+        error_code = extract_error_code(query)
+        
+        # If error code is present, do error code specific search first
+        if error_code:
+            try:
+                # Search specifically in motor error codes using metadata with proper operator syntax
+                error_results = vectorstore.similarity_search(
+                    query,
+                    k=2,
+                    filter={
+                        "$and": [
+                            {"error_code": {"$eq": error_code}},
+                            {"source": {"$eq": "motor_error_codes"}}
+                        ]
+                    }
+                )
+                if error_results:
+                    combined_results.extend([doc.page_content for doc in error_results])
+                    state["logs"].append({
+                        "message": f"Found specific error code match for {error_code}",
+                        "done": True
+                    })
+            except Exception as e:
+                state["logs"].append({
+                    "message": f"Error in error code search: {str(e)}",
+                    "done": True
+                })
+        
+        # Always perform general semantic search
+        try:
+            # For general search, exclude motor error codes to avoid duplication
+            general_filter = {"source": {"$ne": "motor_error_codes"}} if error_code else None
+            general_results = vectorstore.similarity_search(
+                query,
+                k=3,
+                filter=general_filter
+            )
+            general_content = [doc.page_content for doc in general_results]
+            
+            # If we have error code results, append unique general results
+            if combined_results:
+                for content in general_content:
+                    if content not in combined_results:
+                        combined_results.append(content)
+            else:
+                combined_results = general_content
+                
+        except Exception as e:
+            # Fallback to using the retriever tool if metadata filtering fails
+            general_results = tools[0].invoke({"query": query})
+            if not combined_results:  # Only use if we don't have error results
+                combined_results = general_results
+        
+        search_results.append(combined_results)
         state["logs"][i]["done"] = True
         await copilotkit_emit_state(config, state)
 
-    # Add the search results to the RAG results instead of resources
     state["rag_results"].extend(search_results)
     
     state["messages"].append(ToolMessage(
