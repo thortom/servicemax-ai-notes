@@ -15,7 +15,7 @@ from langchain_core.runnables import RunnableConfig
 from research_canvas.state import AgentState
 
 client = OpenAI()
-md = MarkItDown(llm_client=client, llm_model="gpt-4o")
+md = MarkItDown(llm_client=client, llm_model="gpt-4o")  # This does not work for Mac Preview generated PDFs
 
 _RESOURCE_CACHE = {}
 
@@ -27,8 +27,6 @@ def cleanup():
     global client, md
     if client:
         client.close()
-    if md:
-        md.close()
     _RESOURCE_CACHE.clear()
 
 atexit.register(cleanup)
